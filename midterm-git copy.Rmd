@@ -1,0 +1,525 @@
+---
+title: "STAT 345 Midterm Project"
+author: "Ethan Manhart"
+date: "Due April 9"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+font: 12pt
+---
+
+> "NOBODY KNOWS ANYTHING. Not one person in the entire motion picture field knows for a certainty what’s going to work. Every time out it’s a guess—and, if you’re lucky, an educated one." William Goldman, _Adventures in the Screen Trade_
+
+Your data for the midterm project consists of the 1000 highest rated movies on the Internet Movie Database (IMDB). You can find the first 50 movies [here](https://www.imdb.com/search/title/?groups=top_1000&start=1), with navigational links to the other 950 movies.
+
+Each IMDB page records a large amount of information about each movie. We are interested in the following:
+
+   * The average rating of the movie by IMDB users.
+   * The number of ratings of the movie. 
+   * The year the movie was released. 
+   * The gross revenue of the movie (US).
+   * The budget for the movie.
+   * The movie's title.
+   * The movie’s genre(s). 
+   * The four top-billed actors.
+   * The text of the 25 "most helpful" reviews, as well as their helpfulness (ratio of helpful votes out of total votes.) 
+    
+Note that the first five (and last) variables are numeric, and the genre, title, and reviews are strings. In some cases, some of these variables may be missing for a particular movie.
+
+In some cases, the business information page lists multiple gross revenues, depending on the country, or gross receipts by different dates. In case of ambiguity, we are interested in gross receipts for the US, and want to use the figure for the latest available date. If no gross revenue figure is available for the US, treat the gross revenue as missing.
+
+**General advice:** Get started on this one early. If you wait to the last minute, it will not go well.
+
+1. (30 pts) Write code to extract the variables described above from all 1000 movies, and store it in a data frame. For full credit, you should write a function which can extract this information from an arbitrary movie code (or url), and then further code which uses that function and applies it to all 1000 movies. For full credit, your code should avoid loops in favor of vectorized operations and apply (and sapply, lapply, etc., as convenient). Your code should handle missing values appropriately, and should not convert categorical variables into numbers, or numbers into strings, etc.
+
+_Victory conditions:_ You have a data frame with 1000 rows and columns that contain the first six variables, as well as each genre, review, and review helpfulness scores in appropriately formatted columns. Columns have short but clear names. Most rows have no missing values; the few rows where there are missing values have NA in the appropriate places. 
+
+_Mercy condition:_ If you are struggling to get these data in a reasonable form, a compiled, reasonably clean and accurate version for either the URL list or movie data will be added to Canvas called `imdb_urls.csv` and `moviedata.Rdata` respectively.  Use them to answer the following parts, if necessary. Your work in this part, even if not complete, can be scored for partial credit.
+
+1. Create Data Frame for all Desired Variables:
+
+   1.0: Get and Store the Urls for the Top 1000 Movies
+   
+   1.1: Get Movie Title
+   
+   1.2: Get and Store Average Ratings of IMDB Users
+   
+   1.3: Get and Store Number of Ratings
+   
+   1.4: Get and Store the Year of Release
+   
+   1.5: Get and Store the Gross Revenue (US)
+   
+   1.6: Get and Store Movie Budget
+   
+   1.7: Get and Store Movie Title
+   
+   1.8: Get and Store Movie Genre
+   
+   1.9: Get and Store Four Top-Billed Actors/Actresses
+   
+   1.10: Get and Store The Text of the 25 "Most Helpful" Reviews and Their Helpfulness (ratio of helpful votes out of total votes.)
+   
+   1.11: Combine 1.1-1.10 into a Single Data Frame
+   
+   1.12 Create CSV
+   
+-----------------------------------------------------------------------------------------------------------------------
+Library Calls:
+```{r, include = FALSE}
+library(tidyverse)
+library(rvest)
+library(stringr)
+
+library(ggthemes)
+library(knitr)
+
+library(tidytext)
+library(textdata)
+library(lubridate)
+library(scales)
+```
+
+
+1.0: Get and Store the Urls for the Top 1000 Movies:
+
+1.0.1: Find and Store Hyperlinks
+```{r}
+start_of_all_urls <- "https://www.imdb.com/search/title/?groups=top_1000&start="
+
+s <- seq(1, 1000, by = 50)
+imdb_page_identifiers <- str_c(start_of_all_urls, s)
+
+```
+
+1.0.2: Extract Individual Movie Page
+
+a) Function: 
+```{r}
+
+extract_url_data <- function(u1)
+{
+   h1 <- read_html(u1)
+   k1 <- html_nodes(h1, ".lister-item-header a")
+   html_attr(k1, "href")
+}
+
+```
+
+b) Result: Create Individual Movie Hyperlinks
+```{r}
+top_thousand_urls <- unlist(lapply(imdb_page_identifiers, extract_url_data))
+
+movie_identifiers <- str_replace_all(top_thousand_urls, "/title/", "")
+
+movie_identifiers <- str_replace_all(movie_identifiers, "/.+", "")
+
+imdb_movie_urls <- str_c("https://www.imdb.com/title/", movie_identifiers)
+
+```
+
+-----------------------------------------------------------------------------------------------------------------------
+
+IMDB Scraping Functions:
+```{r}
+
+#1.1 (1.7 in directions): Get Movie Title
+
+get_movie_title <- function(n1)
+{
+   k1 <- html_nodes(n1, "h1")
+   raw_title <- parse_character(html_text(k1))
+   raw_title <- unlist(str_split(raw_title, "\\("))
+   nice_title <- str_trim(raw_title[1])
+   return(nice_title)
+}
+
+#1.2: Get and Store Average Ratings of IMDB Users
+
+get_avg_rating <- function(n2)
+{
+   k2 <- html_nodes(n2, "strong span")
+   return (as.numeric(html_text(k2)))
+}
+
+#1.3: Get and Store Total Ratings of IMDB Users
+
+get_total_ratings <- function(u3)
+{
+   L <- str_c(u3, "/ratings")
+   h3 <- read_html(L)
+   k3 <- html_nodes(h3, ".Selected a")
+   parse_number(html_text(k3))
+}
+
+#1.4: Get and Store the Year of Release
+
+get_year_released <- function(n4)
+{
+   k4 <- html_nodes(n4, "#titleYear a")
+   as.numeric(html_text(k4))
+}
+
+#1.5: Get and Store the Gross Revenue (US)
+
+get_gross_rev <- function(n5)
+{
+   k5 <- html_nodes(n5, "#titleDetails")
+   rev_text <- parse_character(html_text(k5))
+   rev_vec <- unlist(str_split(rev_text, "\\n")) %>% str_trim()
+   true_rev <- str_subset(rev_vec, "Gross USA")
+   rev <- parse_number(true_rev)
+   
+   if(is_empty(rev) == FALSE)
+   {
+      return(rev)
+   }
+   
+   else
+   {
+      return(NA)
+   }
+}
+
+#1.6: Get and Store Movie Budget
+
+get_budget <- function(n6)
+{
+   k6 <- html_nodes(n6, "#titleDetails")
+   budget_text <- parse_character(html_text(k6))
+   budget_vec <- unlist(str_split(budget_text, "\\n")) %>% str_trim()
+   true_budget <- str_subset(budget_vec, "Budget")
+   budget <- parse_number(true_budget)
+   
+   if(is_empty(budget) == FALSE)
+   {
+      return(budget)
+   }
+   
+   else
+   {
+      return(NA)
+   }
+}
+
+#1.8: Get and Store Movie Genre
+#The if statements are annoying; better way???
+
+get_genres <- function(n8)
+{
+   k8 <- html_nodes(n8, ".subtext a+ a , .subtext a:nth-child(4)")
+   c8 <- html_text(k8)
+   
+   if(length(c8) == 1){combined <- c8}
+   
+   if(length(c8) == 2){combined <- str_c(c8[1], c8[2], sep = "/")}
+   
+   if(length(c8) == 3){combined <- str_c(c8[1], c8[2], c8[3], sep = "/")}
+   
+   if(length(c8) == 4){combined <- str_c(c8[1], c8[2], c8[3], c8[4], sep = "/")}
+   
+   if(length(c8) > 4){combined <- c("MISTAKE IN 1.8")}
+   
+   return(combined)
+}
+
+#1.9: Get and Store Four Top-Billed Actors/Actresses
+
+get_top4_actors <- function(n9)
+{
+   k9 <- html_nodes(n9, ".primary_photo+ td a")
+   a1 <- html_text(k9)
+   length(a1) <- 4
+   a2 <- parse_character(a1)
+   a3 <- str_replace_all(a2, "\n", "")
+   str_c(a3[1], a3[2], a3[3], a3[4], sep = ", ")
+}
+
+
+#1.10(a): Get and Store The Text of the 25 "Most Helpful" Reviews
+
+get_most_helpful_reviews <- function(u10)
+{
+   LL1 <- str_c(u10, "/reviews")
+   h10 <- read_html(LL1)
+   k10 <- html_nodes(h10, ".text")
+   reviews <- html_text(k10)
+   length(reviews) <- 25
+   reviews_by_row <- data.frame(t(reviews))
+   return(reviews_by_row)
+}
+
+#1.10(b): Get and Store Helpfulness (ratio of helpful votes out of total votes.)
+#With function of functions, second arg probably useless.
+
+get_review_helpfulness <- function(u10, num_reviews = 25)
+{
+   LL2 <- str_c(u10, "/reviews")
+   h11 <- read_html(LL2)
+   k11 <- html_nodes(h11, ".text-muted")
+   text <- html_text(k11)
+   desired_reviews <- text[1:num_reviews]
+   
+   helpfulness_vec <- c()
+   
+   for(m in 1:length(desired_reviews))
+   {
+         filler10 <- desired_reviews[m]
+         split <- str_split(filler10, "out")
+         new_split <- unlist(split)
+         numerator <- parse_number(new_split[1])
+         denomenator <- parse_number(new_split[2])
+         helpfulness_vec[m] <- (numerator/denomenator)
+   }
+  
+   length(helpfulness_vec) <- 25
+   helpfulness_by_row <- data.frame(t(helpfulness_vec))
+   return(helpfulness_by_row)
+}
+
+```
+
+-----------------------------------------------------------------------------------------------------------------------
+Office Hours Help:
+```{r}
+#1: Miscellaneous
+   #Genres are alphabetically ordered not by importance
+
+#2: For Knitting
+   #Create csv and submit
+
+#3: Need change part 3
+   #Each review needs its own sentiment analysis
+```
+
+1.11: KEY FUNCTION: Create IMDB Movies Dataframe
+```{r}
+#number 1.8 not very efficient
+
+create_imdb_movies_df <- function(movies_url)
+{
+   H <- read_html(movies_url)
+   r1 <- get_movie_title(H)
+   r2 <- get_avg_rating(H)
+   r3 <- get_total_ratings(movies_url)
+   r4 <- get_year_released(H)
+   r5 <- get_gross_rev(H)
+   r6 <- get_budget(H)
+   r8 <- get_genres(H)
+   r9 <- get_top4_actors(H)
+   r10 <- get_most_helpful_reviews(movies_url)
+   r11 <- get_review_helpfulness(movies_url)
+   
+   movie_data <- list(r1, r2, r3, r4, r5, r6, r8, r9, r10, r11)
+   imdb_movies_frame <- as.data.frame(movie_data,  col.names = c("Title", "Avg Rating", "Total Ratings", "Year Released", "Gross Revenue USA", "Budget", "Genre", "Top Four Actors", "Most Helpful Review", "Helpfulness Rating"))
+   
+   return(imdb_movies_frame)
+}
+
+```
+
+Generate All Movies and Write CSV:
+```{r, include=FALSE, eval=FALSE}
+#Code works over full dataset with no errors!!!
+#Name issue with Birdman or... (very minor)
+
+#test <- imdb_movie_urls[1:50]
+#imdb_movies_test_dataset <- map_dfr(test, create_imdb_movies_df)
+
+imdb_movies_dataset <- map_dfr(imdb_movie_urls, create_imdb_movies_df)
+write_csv(imdb_movies_dataset, "imdb_movies_file.csv")
+```
+
+Read CSV:
+```{r, include=FALSE}
+imdb_movies_csv <- read_csv("imdb_movies_file.csv")
+```
+
+
+2. (30 pts) Write code to plot the distributions of the first five variables listed above. Make sure missing values, if any, are handled gracefully. Your plots should be appropriately labeled, titled, colored, etc. Comment on the features each plot presents -- what information is gained by seeing these graphics?
+
+Plot 1: Average Rating by IMDB Users
+```{r}
+imdb_movies_csv %>% ggplot(aes(Avg.Rating)) + geom_bar() + labs(x = "Average IMDB Rating", y = "Density", title = "Distribution of Average Ratings") + theme_stata(base_family = "sans", scheme = "s2color")
+```
+The above plot shows the average IMDB Rating for a particular movie out of 10 possible points. We see that the distribution of IMDB Ratings ranges from 7.6-9.3 (code: min(imdb_movies_csv[[2]]) to max(imdb_movies_csv[[2]])) and is skewed right. If the code: median(imdb_movies_csv[[2]]) were run, we would find that the median movie rating is 7.9, which is logical given our graph. Furthermore, given that fivenum(imdb_movies_csv[[2]]) = 7.6, 7.7, 7.9, 8.1, 9.3, we may reasonably conclude that an above average movie on the list has an average rating of 8.1 or higher and a below average movie has a rating of 7.7 score or lower.
+
+
+Plot 2: Total Number of Ratings
+```{r}
+imdb_movies_csv %>% ggplot(aes(Total.Ratings)) +  geom_density(na.rm = TRUE) + labs(x = "Total Number of IMDB Ratings", y = "Density", title = "Distribution of Total Ratings") + theme_stata(base_family = "sans", scheme = "s2color")
+```
+The above plot shows the distribution of the total number of IMDB Ratings for a single movie. The distribution is heavily skewed to the right, with the median total number of IMDB movie reviews being: median(imdb_movies_csv[[3]]) =  140485, a value that would agree with the plot. Although we do not review this now, an interesting plot would be to test for a correlation between the average review given and the total number of movie reviews. (I.e., Do posters tend to talk about good movies more? Bad movie more? Neither?)
+
+*(For additional information, fivenum(imdb_movies_csv[[3]]) = 25034.0, 55688.5, 140485.0, 378851.5, 2372958.0)
+
+
+Plot 3: Year Released
+```{r}
+imdb_movies_csv %>% ggplot(aes(Year.Released)) +  geom_density(na.rm = TRUE) + labs(x = "Year Released", y = "Density", title = "Distribution of Years") + theme_stata(base_family = "sans", scheme = "s2color")
+```
+I found the above plot to be particularly interesting. The first movie ever made was released in 1888. The first movie ever made with sound was made in 1927. And the first full-length movie ever made with color was in 1935. From our graph, it would appear that movies that have stood the test of time are movies that have at least one of the property of sound or color (of course, this would require a more detailed analysis of all the IMDB movies in the top 1000 list). 
+
+Moving to the distribution specifically, the graph appears to be skewed left. This would indicate that most movies that made the IMDB top 1000 movies list are more recent movies. This can of course be tested by running the code: median(imdb_movies_csv[[4]]). From running this, we find that movies released in the year 1999 are most common. (For additional information, fivenum(imdb_movies_csv[[4]]) = 1920.0, 1976.0, 1999.0, 2009.5, 2021.0.)
+
+
+Plot 4: Gross Revenue (US)
+```{r}
+#Tried several different ways and NA omission still not working right.
+
+na_ommitted_Gross_Revenue <- na.omit(imdb_movies_csv[5])
+summary_of_na_ommitted_Gross_Revenue <- fivenum(na_ommitted_Gross_Revenue[[1]])
+
+imdb_movies_csv %>% ggplot(aes(Gross.Revenue.USA, na.rm = TRUE)) + geom_density(na.rm = TRUE) + labs(x = "Gross Revenue (US)", y = "Density", title = "Distribution of Gross Movie Revenues in USA") + theme_stata(base_family = "sans", scheme = "s2color")
+```
+The above plot gives the distribution of Gross US Revenue across the IMDB top 1000 movies. The data should have the NA values ommitted, but nothing I have tried has fixed the issue. For this reason, I include an na_ommitted_Gross_Revenue tibble and a five number summary vector: summary_of_na_ommitted_Gross_Revenue. The five number summary gives that the median Gross US Revenue is 25,100,000 dollars and the mean Gross US Revenue, given by  mean(na_ommitted_Gross_Revenue[[1]]), is 69,862,008 dollars. 
+
+
+Plot 5: Budget
+```{r}
+#I have included in this portion another attempt to remove na values; like the last plot, the na omission  fails
+
+na_ommitted_Budget <- na.omit(imdb_movies_csv[6])
+summary_of_na_ommitted_Budget <- fivenum(na_ommitted_Budget[[1]])
+
+na_ommitted_Budget %>% ggplot(aes(Budget)) + geom_density() + labs(x = "Budget", y = "Density", title = "Distribution of Movie Budgets") + theme_stata(base_family = "sans", scheme = "s2color")
+```
+Analogously to the previous plot, the above plot is intended to give the distribution of Gross US Revenue across the IMDB top 1000 movies, but NA omission has proved to be a larger issue than expected. To make up for the lack of a useful graph, I have included an na_ommitted_Budget tibble and a five number summary vector: summary_of_na_ommitted_Budget. The five number summary gives that the median Movie Budget is 14,000,000 dollars and the mean Budget, given by  mean(na_ommitted_Gross_Revenue[[1]]), is 109,850,668 dollars. (The large gap between the mean and the median indicate that our plot-when working correctly-will be skewed right.)
+
+3. (20 pts) Complete a sentiment analyses on the 25 most helpful reviews for each movie. The choice of lexicon is up to you, but explain your reasons why your choice is the most reasonable/appropriate option. Add a summary of this information to your original data frame.
+
+Filter Text:
+```{r}
+#NRC Citation info: This dataset was published in Saif M. Mohammad and Peter Turney. (2013), ``Crowdsourcing a Word-Emotion Association Lexicon.'' Computational Intelligence, 29(3): 436-465.
+
+nrc_sentiment_analysis <- function(movie_title)
+{
+   current_movie_df <- imdb_movies_csv %>% filter(Title %in% movie_title)
+   review <- c()   
+   
+   for (p in 1:25)
+   { 
+      review[p] <- str_c("Most.Helpful.Review.X", p)
+   }
+   
+   movie_reviews_vec <- unlist(unname(current_movie_df %>% select(all_of(review))))
+   
+   if(is_empty(movie_reviews_vec) == FALSE)
+   {
+      tibble_for_text_an <- tibble(review_num = c(1:25), review_text = movie_reviews_vec)
+      
+      tibble_for_text_an2 <- tibble_for_text_an %>% unnest_tokens(word, review_text) %>% filter(!word %in% stop_words$word)
+      
+       nrc <- get_sentiments("nrc")
+      
+      table_with_sentiments <- tibble_for_text_an2 %>% inner_join(nrc, by = "word")%>% count(sentiment) %>% arrange(desc(n))
+      
+      table_with_sentiments2 <- table_with_sentiments %>% mutate(sentiment.percent = 100*round(n/sum(n), 3)) %>% select(-n)
+      
+      #return(tibble_for_text_an2)
+      #return(table_with_sentiments2)
+      
+      names_vec <- str_c("total.percent.", table_with_sentiments2[[1]])
+      values_list <- as.list(table_with_sentiments2[[2]])
+       
+      clean_sentiments_df <- as.data.frame(values_list, col.names = names_vec)
+      return(clean_sentiments_df)
+   }
+   
+   else
+   {
+      na.list <- list(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+      return(NA)
+   }
+}
+
+```
+
+```{r}
+#NRC Citation info: This dataset was published in Saif M. Mohammad and Peter Turney. (2013), ``Crowdsourcing a Word-Emotion Association Lexicon.'' Computational Intelligence, 29(3): 436-465.
+
+more_correct_nrc_sentiment_analysis <- function(movie_title)
+{
+   current_movie_df <- imdb_movies_csv %>% filter(Title %in% movie_title)
+   review <- c()   
+   
+   for(p in 1:25)
+   { 
+      review[p] <- str_c("Most.Helpful.Review.X", p)
+   }
+   
+   movie_reviews_vec <- unlist(unname(current_movie_df %>% select(all_of(review))))
+   
+   if(is_empty(movie_reviews_vec) == FALSE)
+   {
+      tibble_for_text_an <- tibble(review_num = c(1:25), review_text = movie_reviews_vec)
+      
+      nrc <- get_sentiments("nrc")
+      
+      tibble_list <- list()
+      
+      for (q in 1:25) 
+      {
+         tibble_list[[q]] <- tibble_for_text_an %>% unnest_tokens(word, review_text) %>% filter(!word %in% stop_words$word) %>% filter(review_num == q) %>% inner_join(nrc, by = "word") %>% count(sentiment) %>% arrange(desc(n)) %>% mutate(sentiment.percent = 100*round(n/sum(n), 3)) %>% select(-n)
+         
+         sentiment_vals_vec <- c()
+         sentiment_vals_vec <- unlist(unname(tibble_list[[q]] %>% mutate(true.sentiment.percent = str_c(sentiment, str_c(sentiment.percent, "%"), sep = ": ")) %>% select(true.sentiment.percent)))
+         length(sentiment_vals_vec) <- 10
+        
+        tibble_list[[q]] <- sentiment_vals_vec
+      }
+      
+      return(tibble_list)
+      #return(tibble_for_text_an)
+   }
+   
+   else
+   {
+      return(NA)
+   }
+   
+}
+
+```
+
+Run Sentiment Analysis and Update IMDB Dataframe
+```{r, include = FALSE}
+
+imdb_subset_titles <- imdb_movies_csv[[1]]
+#imdb_subset_titles <- imdb_movies_test_dataset[[1]]
+
+#Errors in both code blocks; unknown reason as both worked for the testing dataset; hence commented out
+
+#1: To get summary data of sentiments:
+
+   #sentiments_df <- map_dfr(imdb_subset_titles, nrc_sentiment_analysis)
+   
+   #new_imdb_dataset <- cbind.data.frame(imdb_movies_csv, sentiments_df)
+   
+#2: To get desired data per movie: (Note: Unable to add data to existing imdb_movies_dataset); Works over entire set
+   
+   #desired_sentiment_data <- lapply(imdb_subset_titles, more_correct_nrc_sentiment_analysis)
+```
+
+
+4. (20 pts) Variable Relationships. Create one plot that displays the relationship (or lack thereof) between any of the movie variables. Your plot should be appropriately labeled, titled, colored, etc. Your plot should display at minimum 3 variables. A plot with more variables included will be scored more favorably (as long as the plot is reasonable and legible). Reviews and helpfulness/sentiment scores are considered aggregate variables (e.g., 25 helpfulness scores will be considered a single variable). Some questions that you might consider when creating your plot are below, though you are not limited to these questions. 
+   - Is there any evidence of a relationship between review helpfulness and review sentiment? 
+   - Do the review scores (from the most helpful reviews) generally agree with the overall IMDB average rating?
+   - Is there evidence of a relationship between average IMDB rating and a movie's gross? Does release year seem to have an effect on this relationship?
+   - Is there evidence of a relationship between a movie's budget and a movie's gross? Does release year seem to have an effect on this relationship? 
+   - Do any actors have an effect (positive or negative) on the relationship between budget, gross, or average IMDB rating? Is this pattern common across any genres?
+
+```{r}
+imdb_movies_csv %>% ggplot(aes(Avg.Rating, Total.Ratings)) + geom_boxplot()
+
+```
+
+  
+  
+  
+  
+  
+  
+
+
